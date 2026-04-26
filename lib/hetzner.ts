@@ -1,4 +1,3 @@
-// src/lib/hetzner.ts
 import axios from "axios";
 
 export const hetzner = axios.create({
@@ -10,7 +9,7 @@ export const hetzner = axios.create({
 
 export async function createServer() {
   const res = await hetzner.post("/servers", {
-    name: "wanky-vps",
+    name: "wanky-test-vps",
     server_type: "cx11",
     image: "ubuntu-22.04",
     location: "fsn1",

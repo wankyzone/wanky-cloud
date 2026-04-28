@@ -6,3 +6,12 @@
     }
   ]
 }
+
+{
+  "cron": [
+    {
+      "path": "/api/cron/renew?secret=wanky_super_secure_2026",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

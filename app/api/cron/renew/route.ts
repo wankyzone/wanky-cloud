@@ -1,21 +1,36 @@
 import { supabase } from "@/lib/supabase";
 import { PLANS } from "@/lib/plans";
 
-export async function GET() {
-  try {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+
+  // 🔐 Secure endpoint
+  if (searchParams.get("secret") !== process.env.CRON_SECRET) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  console.log("CRON RUNNING...");
+
+  // 1. Get active subscriptions
+  const { data: subs, error } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("status", "active");
+
+  if (error) {
+    console.error(error);
+    return Response.json({ error: "Failed to fetch subs" });
+  }
+
+  for (const sub of subs || []) {
     const now = new Date();
+    const expires = new Date(sub.current_period_end);
 
-    // 1. Get subscriptions that expired
-    const { data: subs } = await supabase
-      .from("subscriptions")
-      .select("*")
-      .lte("current_period_end", now.toISOString())
-      .eq("status", "active");
-
-    for (const sub of subs || []) {
+    // 2. Check if expired
+    if (expires < now) {
       const plan = PLANS[sub.plan as keyof typeof PLANS];
 
-      // 2. Get wallet
+      // 3. Get wallet
       const { data: wallet } = await supabase
         .from("wallets")
         .select("*")
@@ -24,9 +39,9 @@ export async function GET() {
 
       if (!wallet) continue;
 
-      // 3. Check balance
+      // 4. Deduct if enough balance
       if (wallet.balance >= plan.price) {
-        // ✅ Deduct
+        // deduct
         await supabase
           .from("wallets")
           .update({
@@ -34,30 +49,29 @@ export async function GET() {
           })
           .eq("user_id", sub.user_id);
 
-        // ✅ Extend subscription
+        // extend subscription
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+
         await supabase
           .from("subscriptions")
           .update({
-            current_period_end: new Date(
-              Date.now() + 30 * 24 * 60 * 60 * 1000
-            ),
+            current_period_end: nextMonth.toISOString(),
           })
           .eq("id", sub.id);
 
+        console.log(`Renewed ${sub.user_id}`);
       } else {
-        // ❌ Insufficient funds → deactivate
+        // expire
         await supabase
           .from("subscriptions")
-          .update({
-            status: "inactive",
-          })
+          .update({ status: "expired" })
           .eq("id", sub.id);
+
+        console.log(`Expired ${sub.user_id}`);
       }
     }
-
-    return Response.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    return Response.json({ error: "Failed" }, { status: 500 });
   }
+
+  return Response.json({ success: true });
 }

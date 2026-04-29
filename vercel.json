@@ -1,15 +1,6 @@
 {
   "cron": [
     {
-      "path": "/api/cron/billing",
-      "schedule": "0 0 * * *"
-    }
-  ]
-}
-
-{
-  "cron": [
-    {
       "path": "/api/cron/renew?secret=wanky_super_secure_2026",
       "schedule": "0 0 * * *"
     }

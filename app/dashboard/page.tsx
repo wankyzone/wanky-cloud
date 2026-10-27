@@ -3,111 +3,81 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { PLANS, PlanId } from "@/lib/plans";
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Boxes, CircleHelp, Clock3, CreditCard, Plus, RefreshCw, Server, ShieldCheck, Sparkles, TerminalSquare } from "lucide-react";
+import { Activity, ArrowDownToLine, ArrowRight, Bot, Bug, ChevronDown, CircleDashed, Cloud, Code2, FilePlus2, GitBranch, GitPullRequest, MessageSquare, Plus, Send, ShieldCheck, Sparkles, TerminalSquare, WandSparkles } from "lucide-react";
 
-type ServerRecord = { id: string; status?: string; ip?: string; plan?: string; created_at?: string };
+type ServerRecord = { id: string; status?: string; ip?: string; plan?: string };
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [balance, setBalance] = useState<number | null>(null);
-  const [subscription, setSubscription] = useState<any>(null);
   const [servers, setServers] = useState<ServerRecord[]>([]);
+  const [draft, setDraft] = useState("");
   const [dataError, setDataError] = useState(false);
-  const [showUpgrade, setShowUpgrade] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>("starter");
+  const [userLabel, setUserLabel] = useState("builder");
 
-  const loadOverview = async () => {
-    setRefreshing(true);
-    setDataError(false);
-    try {
-      const [balanceRes, subRes, serverRes] = await Promise.all([
-        fetch("/api/user/balance", { cache: "no-store" }),
-        fetch("/api/subscription", { cache: "no-store" }),
-        fetch("/api/servers/list", { cache: "no-store" }),
-      ]);
-      const [balanceData, subData, serverData] = await Promise.all([balanceRes.json(), subRes.json(), serverRes.json()]);
-      if (balanceRes.ok && typeof balanceData.balance === "number") setBalance(balanceData.balance);
-      else setBalance(null);
-      if (subRes.ok) setSubscription(subData.subscription ?? null);
-      if (serverRes.ok && Array.isArray(serverData.servers)) setServers(serverData.servers);
-      if (!balanceRes.ok || !subRes.ok || !serverRes.ok) setDataError(true);
-    } catch { setDataError(true); }
-    finally { setLoading(false); setRefreshing(false); }
-  };
-
-  useEffect(() => { void loadOverview(); }, []);
-
-  const createVPS = async () => {
-    setRefreshing(true);
-    try {
-      const res = await fetch("/api/servers/create", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || data.error) window.alert(data.error || "Could not start server request.");
-      else await loadOverview();
-    } catch { window.alert("Could not reach the server. Please try again."); }
-    finally { setRefreshing(false); }
-  };
-
-  const payWithPaystack = () => {
-    window.alert("Wallet funding will be available after the payment verification flow is secured.");
-  };
-
-  const subscribeToPlan = () => {
-    window.alert("Plan checkout will be available after the payment verification flow is secured.");
-  };
-
-  const activeServers = servers.filter(server => server.status === "running").length;
-  const pendingServers = servers.filter(server => ["creating", "provisioning", "pending"].includes((server.status || "").toLowerCase())).length;
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const [{ data }, response] = await Promise.all([
+          supabase.auth.getUser(),
+          fetch("/api/servers/list", { cache: "no-store" })
+        ]);
+        const result = await response.json();
+        if (!active) return;
+        setUserLabel(data.user?.user_metadata?.user_name || data.user?.user_metadata?.full_name || data.user?.email?.split("@")[0] || "builder");
+        if (response.ok && Array.isArray(result.servers)) setServers(result.servers);
+        else setDataError(true);
+      } catch { if (active) setDataError(true); }
+      finally { if (active) setLoading(false); }
+    }
+    void load();
+    return () => { active = false; };
+  }, []);
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-7">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div><div className="flex items-center gap-2 text-xs text-[#8b949e]"><span>Workspace</span><span>/</span><span className="text-[#c9d1d9]">Overview</span></div><h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">Your cloud workspace</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#9da7b3]">A clear view of your services, account, and recent activity.</p></div>
-        <div className="flex flex-wrap gap-2"><button onClick={() => void loadOverview()} disabled={refreshing} className="inline-flex items-center gap-2 rounded-lg border border-[#30363d] px-3.5 py-2.5 text-xs font-medium text-[#c9d1d9] hover:bg-white/[0.04] disabled:opacity-50"><RefreshCw size={14} className={refreshing ? "animate-spin" : ""} /> Refresh</button><button onClick={createVPS} disabled={refreshing} className="inline-flex items-center gap-2 rounded-lg bg-[#b8f36b] px-3.5 py-2.5 text-xs font-semibold text-[#10170b] hover:bg-[#c8ff83] disabled:opacity-50"><Plus size={15} /> New service</button></div>
+    <div className="mx-auto grid max-w-[1600px] gap-6 2xl:grid-cols-[minmax(0,1fr)_312px]">
+      <div className="min-w-0">
+        <div className="mb-6 flex items-center justify-between gap-3"><span className="inline-flex items-center gap-2 rounded-full border border-[#238636] px-2.5 py-1 text-[11px] text-[#3fb950]">Preview <ChevronDown size={12} /></span><span className="text-xs text-[#7d8590]">Workspace overview</span></div>
+        <section className="mx-auto max-w-[820px]">
+          <h1 className="mb-4 text-center text-xl font-semibold tracking-tight text-[#f0f6fc] sm:text-2xl">Good morning, {userLabel}!</h1>
+          <form onSubmit={e => { e.preventDefault(); if (draft.trim()) window.location.href = "/dashboard/applications"; }} className="rounded-xl border border-[#3d444d] bg-[#0d1117] p-4 shadow-sm transition focus-within:border-[#6e7681]">
+            <label htmlFor="workspace-prompt" className="sr-only">Ask Wanky Cloud or describe an application</label>
+            <textarea id="workspace-prompt" value={draft} onChange={e => setDraft(e.target.value)} placeholder="Ask anything or describe what you want to deploy" rows={3} className="min-h-[86px] w-full resize-y bg-transparent text-sm leading-6 text-[#e6edf3] outline-none placeholder:text-[#8b949e]" />
+            <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-[#8b949e]"><button type="button" className="inline-flex items-center gap-2 hover:text-[#e6edf3]"><WandSparkles size={15} /> Auto <ChevronDown size={12} /></button><span className="hidden h-4 w-px bg-[#30363d] sm:block" /><span>Workspace-aware actions</span><span className="ml-auto hidden items-center gap-2 sm:flex"><ShieldCheck size={14} /> Protected by workspace access</span></div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[#21262d] pt-3"><Link href="/dashboard/applications" className="inline-flex items-center gap-2 rounded-md border border-[#30363d] px-3 py-2 text-xs hover:bg-white/[0.05]"><MessageSquare size={14} /> Ask <ChevronDown size={12} /></Link><button type="button" className="inline-flex items-center gap-2 rounded-md border border-[#30363d] px-3 py-2 text-xs hover:bg-white/[0.05]"><Cloud size={14} /> All projects <ChevronDown size={12} /></button><button type="button" aria-label="Attach context" className="flex h-8 w-8 items-center justify-center rounded-md border border-[#30363d] text-[#9da7b3] hover:bg-white/[0.05]"><Plus size={15} /></button><button type="submit" aria-label="Continue to applications" className="ml-auto flex h-8 w-8 items-center justify-center rounded-md bg-[#b8f36b] text-[#10170b] hover:bg-[#c8ff83]"><Send size={14} /></button></div>
+          </form>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[{label:"Debug",icon:Bug,href:"/dashboard/logs"},{label:"Agent",icon:Bot,href:"/dashboard/applications"},{label:"Create issue",icon:CircleDashed,href:"/dashboard/applications"},{label:"Write code",icon:Code2,href:"/dashboard/applications"}].map(({label,icon:Icon,href})=><Link key={label} href={href} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#30363d] px-3 py-3 text-xs text-[#c9d1d9] transition hover:border-[#6e7681] hover:bg-white/[0.035]"><Icon size={15} className="text-[#9da7b3]" />{label}{label==="Write code"&&<ChevronDown size={12}/>}</Link>)}
+          </div>
+
+          <section className="mt-8">
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-semibold text-[#8b949e]">Your applications</h2><Link href="/dashboard/applications" className="inline-flex items-center gap-2 text-xs text-[#58a6ff] hover:underline">View all <ArrowRight size={13}/></Link></div>
+            <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117]">
+              {loading ? <div className="p-5 text-xs text-[#8b949e]">Loading workspace…</div> : servers.length ? servers.slice(0,4).map((server,index)=><div key={server.id} className={`flex items-center gap-3 px-4 py-4 ${index?"border-t border-[#21262d]":""}`}><span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#30363d] bg-[#151b23]"><GitBranch size={15} className="text-[#9da7b3]"/></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{server.id}</div><div className="mt-1 text-[11px] text-[#8b949e]">{server.plan || "Compute service"} · {server.ip && server.ip!=="Provisioning..." ? server.ip : "Address not assigned"}</div></div><Status status={server.status || "unknown"}/></div>) : <div className="px-5 py-7"><p className="text-sm font-medium">{dataError ? "Workspace data is unavailable" : "Your first project starts here"}</p><p className="mt-1 text-xs leading-5 text-[#8b949e]">{dataError ? "We could not load service records. Try refreshing the page." : "Create an application or service to begin building your workspace. No projects are listed yet."}</p><Link href="/dashboard/applications" className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#30363d] px-3 py-2 text-xs hover:bg-white/[0.04]"><Plus size={14}/> Create project</Link></div>}
+            </div>
+          </section>
+
+          <section className="mt-8">
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-semibold text-[#8b949e]">Recent deployments</h2><Link href="/dashboard/deployments" className="text-xs text-[#58a6ff] hover:underline">View all →</Link></div>
+            <div className="rounded-xl border border-[#30363d] bg-[#0d1117] px-4 py-5"><div className="flex items-start gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#30363d]"><GitPullRequest size={15} className="text-[#8b949e]"/></span><div><p className="text-sm font-medium">Deployment history</p><p className="mt-1 text-xs leading-5 text-[#8b949e]">Your real deployment events will appear here once the deployment event source is connected.</p></div></div></div>
+          </section>
+        </section>
       </div>
 
-      {dataError && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#9e6a24]/40 bg-[#9e6a24]/10 px-4 py-3 text-xs text-[#e3bd83]">Some workspace data could not be loaded. Values may be incomplete.<button onClick={() => void loadOverview()} className="underline">Retry</button></div>}
-
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric title="Services" value={loading ? "Loading…" : String(servers.length)} detail={loading ? "Fetching account data" : `${activeServers} running · ${pendingServers} provisioning`} icon={Server} />
-        <Metric title="Subscription" value={loading ? "Loading…" : subscription?.plan || "No plan"} detail={subscription?.status || "Plan status"} icon={ShieldCheck} />
-        <Metric title="Wallet balance" value={loading ? "Loading…" : balance === null ? "Unavailable" : `₦${balance.toLocaleString("en-NG")}`} detail="Account balance" icon={CreditCard} />
-        <Metric title="Monitoring" value="Not connected" detail="Telemetry integration pending" icon={Activity} muted />
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(280px,.8fr)]">
-        <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117]">
-          <div className="flex items-center justify-between border-b border-[#30363d] px-5 py-4"><div><h2 className="text-sm font-semibold">Your services</h2><p className="mt-1 text-xs text-[#8b949e]">Resources associated with your account</p></div><Link href="/dashboard/servers" className="inline-flex items-center gap-1.5 text-xs text-[#b8f36b] hover:underline">View services <ArrowRight size={13} /></Link></div>
-          {loading ? <div className="space-y-3 p-5"><div className="h-10 animate-pulse rounded-md bg-white/[0.04]" /><div className="h-10 animate-pulse rounded-md bg-white/[0.04]" /></div> : servers.length ? <div className="divide-y divide-[#21262d]">{servers.slice(0,5).map(server => <div key={server.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"><div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#30363d] bg-[#151b23] text-[#b8f36b]"><Server size={17} /></span><div className="min-w-0"><div className="truncate text-sm font-medium">{server.id}</div><div className="mt-1 text-xs text-[#8b949e]">{server.ip && server.ip !== "Provisioning..." ? server.ip : "Address not assigned"}{server.plan ? ` · ${server.plan}` : ""}</div></div></div><StatusPill status={server.status || "unknown"} /></div>)}</div> : <div className="flex flex-col items-center px-6 py-12 text-center"><span className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#30363d] bg-[#151b23] text-[#b8f36b]"><Boxes size={21} /></span><h3 className="mt-4 text-sm font-semibold">Your workspace is ready to begin</h3><p className="mt-2 max-w-sm text-xs leading-5 text-[#8b949e]">Create your first service when provisioning is enabled for your account. No services are currently listed.</p><button onClick={createVPS} disabled={refreshing} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[#b8f36b] px-4 py-2.5 text-xs font-semibold text-[#10170b] hover:bg-[#c8ff83] disabled:opacity-50"><Plus size={14} /> Create service</button></div>}
-        </div>
-
-        <div className="space-y-5">
-          <section className="rounded-xl border border-[#30363d] bg-[#0d1117]">
-            <div className="border-b border-[#30363d] px-4 py-4"><h2 className="text-sm font-semibold">Quick start</h2><p className="mt-1 text-xs text-[#8b949e]">Common next steps</p></div>
-            <div className="p-2">{[{icon:Boxes,title:"Explore services",desc:"Review your compute resources",href:"/dashboard/servers"},{icon:CreditCard,title:"Usage & billing",desc:"Check account and plan details",href:"/dashboard/wallet"},{icon:TerminalSquare,title:"Build & runtime logs",desc:"Log viewer integration planned",href:"/dashboard/logs"}].map(({icon:Icon,title,desc,href}) => <Link key={title} href={href} className="flex items-center gap-3 rounded-lg p-3 transition hover:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#30363d] text-[#9da7b3]"><Icon size={16} /></span><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{title}</span><span className="mt-1 block text-[11px] text-[#8b949e]">{desc}</span></span><ArrowUpRight size={14} className="text-[#7d8590]" /></Link>)}</div>
-          </section>
-          <section className="rounded-xl border border-[#30363d] bg-[#0d1117] p-4"><div className="flex items-center gap-2 text-sm font-semibold"><Sparkles size={16} className="text-[#b8f36b]" /> Platform status</div><p className="mt-2 text-xs leading-5 text-[#8b949e]">Some cloud capabilities are still being integrated. Planned pages are labelled in navigation; metrics appear only when connected to real sources.</p><div className="mt-3 flex items-center gap-2 text-[11px] text-[#c9d1d9]"><Clock3 size={13} /> Status is not a live health check</div></section>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-[#30363d] bg-[#0d1117]">
-        <div className="flex items-center justify-between border-b border-[#30363d] px-5 py-4"><div><h2 className="text-sm font-semibold">Activity</h2><p className="mt-1 text-xs text-[#8b949e]">Workspace events</p></div><span className="text-[11px] text-[#7d8590]">Recent</span></div>
-        <div className="flex flex-col items-center px-6 py-9 text-center"><span className="flex h-10 w-10 items-center justify-center rounded-full border border-[#30363d] text-[#8b949e]"><Activity size={17} /></span><p className="mt-3 text-xs font-medium text-[#c9d1d9]">No activity feed connected yet</p><p className="mt-1 max-w-md text-[11px] leading-5 text-[#8b949e]">Deployment events and audit activity will appear here when their event sources are integrated.</p></div>
-      </section>
-
-      {showUpgrade && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"><div role="dialog" aria-modal="true" aria-labelledby="upgrade-title" className="w-full max-w-md rounded-xl border border-[#30363d] bg-[#0d1117] p-6"><h2 id="upgrade-title" className="text-lg font-semibold">Choose a plan</h2><p className="mt-1 text-sm text-[#8b949e]">Checkout will be enabled after payment verification is secured.</p><div className="mt-4 space-y-2">{Object.entries(PLANS).map(([id,plan]) => <button key={id} onClick={() => setSelectedPlan(id as PlanId)} className={`w-full rounded-lg border p-3 text-left ${selectedPlan===id ? "border-[#b8f36b] bg-[#b8f36b]/[0.07]" : "border-[#30363d]"}`}><span className="block text-sm font-medium">{plan.name}</span><span className="mt-1 block text-xs text-[#8b949e]">₦{plan.price.toLocaleString("en-NG")} / month</span></button>)}</div><div className="mt-5 flex gap-3"><button onClick={subscribeToPlan} className="flex-1 rounded-lg bg-[#b8f36b] px-4 py-2.5 text-sm font-semibold text-[#10170b]">Continue</button><button onClick={() => setShowUpgrade(false)} className="rounded-lg border border-[#30363d] px-4 py-2.5 text-sm">Cancel</button></div></div></div>}
+      <aside className="hidden space-y-4 2xl:block">
+        <section className="overflow-hidden rounded-xl border border-[#30363d] bg-[#0d1117]">
+          <div className="flex h-14 items-center justify-between border-b border-[#30363d] px-4"><h2 className="text-sm font-semibold">Get started with Wanky Cloud</h2><Sparkles size={15} className="text-[#b8f36b]"/></div>
+          <div className="p-4"><p className="text-xs leading-5 text-[#8b949e]">Set up your workspace and connect the services you want to run.</p><div className="mt-4 space-y-3">{[{label:"Explore applications",href:"/dashboard/applications"},{label:"Review compute services",href:"/dashboard/servers"},{label:"Read build & runtime logs",href:"/dashboard/logs"}].map(item=><Link key={item.label} href={item.href} className="flex items-center justify-between gap-2 text-xs text-[#c9d1d9] hover:text-[#b8f36b]">{item.label}<ArrowRight size={13}/></Link>)}</div></div>
+        </section>
+        <section className="rounded-xl border border-[#30363d] bg-[#0d1117] p-4"><h2 className="text-sm font-semibold">Latest platform updates</h2><div className="mt-4 border-l border-[#30363d] pl-4"><div className="relative mb-4"><span className="absolute -left-[21px] top-1 h-2 w-2 rounded-full bg-[#6e7681]"/><p className="text-[10px] text-[#8b949e]">Platform direction</p><p className="mt-1 text-xs leading-5 text-[#c9d1d9]">Application workspace and deployment foundations are being connected.</p></div><div className="relative"><span className="absolute -left-[21px] top-1 h-2 w-2 rounded-full bg-[#6e7681]"/><p className="text-[10px] text-[#8b949e]">Security</p><p className="mt-1 text-xs leading-5 text-[#c9d1d9]">Payment and provisioning flows are being hardened before activation.</p></div></div><Link href="/" className="mt-4 inline-flex items-center gap-1 text-[11px] text-[#8b949e] hover:text-white">Public website <ArrowRight size={12}/></Link></section>
+        <section className="rounded-xl border border-[#30363d] bg-[#0d1117] p-4"><div className="flex items-center gap-2 text-xs font-semibold"><Activity size={14} className="text-[#b8f36b}"/> Platform status</div><p className="mt-2 text-[11px] leading-5 text-[#8b949e]">Some integrations are still planned. No simulated telemetry is shown as live data.</p></section>
+      </aside>
     </div>
   );
 }
 
-function Metric({title,value,detail,icon:Icon,muted=false}:{title:string;value:string;detail:string;icon:typeof Server;muted?:boolean}) {
-  return <article className="rounded-xl border border-[#30363d] bg-[#0d1117] p-4"><div className="flex items-center justify-between gap-2"><span className="text-xs text-[#8b949e]">{title}</span><Icon size={16} className={muted ? "text-[#7d8590]" : "text-[#b8f36b]"} /></div><div className="mt-3 truncate text-xl font-semibold tracking-tight">{value}</div><p className="mt-1 text-[11px] text-[#8b949e]">{detail}</p></article>;
-}
-
-function StatusPill({status}:{status:string}) {
+function Status({status}:{status:string}) {
   const normalized=status.toLowerCase();
-  const cls=normalized==="running" ? "border-[#238636]/50 bg-[#238636]/10 text-[#3fb950]" : ["creating","provisioning","pending"].includes(normalized) ? "border-[#9e6a24]/50 bg-[#9e6a24]/10 text-[#e3b341]" : "border-[#30363d] bg-[#151b23] text-[#9da7b3]";
-  return <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${cls}`}>{status}</span>;
+  const styles=normalized==="running" ? "border-[#238636]/50 bg-[#238636]/10 text-[#3fb950]" : ["creating","provisioning","pending"].includes(normalized) ? "border-[#9e6a24]/50 bg-[#9e6a24]/10 text-[#e3b341]" : "border-[#30363d] bg-[#151b23] text-[#9da7b3]";
+  return <span className={`rounded-full border px-2 py-1 text-[10px] ${styles}`}>{status}</span>;
 }

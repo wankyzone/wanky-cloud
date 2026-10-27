@@ -3,20 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { authenticatedFetch } from "@/lib/api-client";
+import {
+  getDeploymentSuccessRate,
+  getRecentActivity,
+  type DashboardOverviewSummary,
+} from "@/lib/dashboard-overview-display";
 
 type DashboardOverview = {
-  summary: {
-    accountCount: number;
-    applicationCount: number;
-    activeApplications: number;
-    suspendedApplications: number;
-    archivedApplications: number;
-    deploymentCount: number;
-    activeDeployments: number;
-    readyDeployments: number;
-    failedDeployments: number;
-    cancelledDeployments: number;
-  };
+  summary: DashboardOverviewSummary;
   recentApplications: Array<{
     id: string;
     accountId: string;
@@ -38,7 +32,7 @@ type DashboardOverview = {
   }>;
 };
 
-const cardClass = "rounded-xl border border-border bg-surface p-5";
+const cardClass = "rounded-xl border border-border bg-surface p-5 shadow-[0_12px_36px_-28px_rgba(0,0,0,0.9)]";
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -48,7 +42,7 @@ function formatDate(value: string): string {
 }
 
 function readableStatus(value: string): string {
-  return value.replaceAll("_", " ");
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function deploymentStatusClass(status: string): string {
@@ -66,16 +60,26 @@ function StatCard({
   label,
   value,
   detail,
+  tone = "default",
 }: {
   label: string;
-  value: number;
+  value: string | number;
   detail: string;
+  tone?: "default" | "unavailable";
 }) {
   return (
-    <article className={cardClass}>
-      <p className="text-sm text-muted">{label}</p>
-      <p className="mt-3 text-3xl font-semibold tabular-nums">{value}</p>
-      <p className="mt-2 text-xs text-muted">{detail}</p>
+    <article className={`${cardClass} min-h-36`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-muted">{label}</p>
+        <span
+          aria-hidden="true"
+          className={`size-2 rounded-full ${tone === "unavailable" ? "bg-muted/70" : "bg-brand"}`}
+        />
+      </div>
+      <p className={`mt-4 text-3xl font-semibold tracking-tight tabular-nums ${tone === "unavailable" ? "text-muted" : "text-foreground"}`}>
+        {value}
+      </p>
+      <p className="mt-2 text-xs leading-5 text-muted">{detail}</p>
     </article>
   );
 }
@@ -152,166 +156,263 @@ export default function DashboardPage() {
   const { summary, recentApplications, recentDeployments } = overview;
   const noAccounts = summary.accountCount === 0;
   const noApplications = summary.applicationCount === 0;
-
-  if (noAccounts) {
-    return (
-      <div className="mx-auto max-w-5xl">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Workspace overview</p>
-            <h2 className="mt-2 text-2xl font-semibold">Welcome to Wanky Cloud</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-              Set up your hosting account to start organizing applications.
-            </p>
-          </div>
-        </header>
-        <section className={`${cardClass} mt-8 max-w-2xl border-dashed`}>
-          <h3 className="text-lg font-semibold">Create your first hosting account</h3>
-          <p className="mt-2 text-sm leading-6 text-muted">
-            Accounts let you organize applications and manage access with your team.
-          </p>
-          <Link
-            href="/dashboard/apps/new"
-            className="mt-5 inline-flex min-h-11 items-center rounded-lg bg-brand-button px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-button-hover"
-          >
-            Set up account
-          </Link>
-        </section>
-      </div>
-    );
-  }
+  const successRate = getDeploymentSuccessRate(summary);
+  const activity = getRecentActivity({ recentApplications, recentDeployments });
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+    <div className="mx-auto max-w-7xl space-y-7">
+      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Workspace overview</p>
-          <h2 className="mt-2 text-2xl font-semibold">Welcome to Wanky Cloud</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            A live view of applications and deployment activity across your {summary.accountCount === 1 ? "authorized account" : "authorized accounts"}.
+          <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Your infrastructure, at a glance.</h2>
+          <p className="mt-3 text-sm leading-6 text-muted">
+            Saved account, application, and deployment records within your authorized workspace.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <nav aria-label="Overview actions" className="flex flex-wrap gap-2">
           <a
             href="#recent-deployments"
-            className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-brand hover:text-brand"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium transition-colors hover:border-brand/60 hover:text-brand"
           >
-            View deployments
+            Recent activity
           </a>
           <Link
             href="/dashboard/apps"
-            className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:border-brand hover:text-brand"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium transition-colors hover:border-brand/60 hover:text-brand"
           >
-            View applications
+            Applications
           </Link>
           <Link
             href="/dashboard/apps/new"
-            className="inline-flex min-h-11 items-center rounded-lg bg-brand-button px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-button-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-button px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-button-hover"
           >
-            Create application
+            {noAccounts ? "Set up account" : "New application"}
           </Link>
-        </div>
+        </nav>
       </header>
 
-      <section aria-label="Workspace summaries" className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Applications" value={summary.applicationCount} detail={`${summary.activeApplications} active`} />
-        <StatCard label="Deployments" value={summary.deploymentCount} detail={`${summary.readyDeployments} ready`} />
-        <StatCard label="In progress" value={summary.activeDeployments} detail="Queued, building, or deploying" />
-        <StatCard label="Needs attention" value={summary.failedDeployments} detail={`${summary.cancelledDeployments} cancelled`} />
+      <section aria-label="Operational summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Applications"
+          value={summary.applicationCount}
+          detail={`${summary.activeApplications} active · ${summary.suspendedApplications} suspended`}
+        />
+        <StatCard
+          label="Deployment records"
+          value={summary.deploymentCount}
+          detail={`${summary.readyDeployments} ready · ${summary.failedDeployments} failed`}
+        />
+        <StatCard
+          label="Recorded success rate"
+          value={successRate.value}
+          detail={`${successRate.detail} · excludes cancelled`}
+          tone={successRate.value === "—" ? "unavailable" : "default"}
+        />
+        <StatCard
+          label="Platform health"
+          value="Not monitored"
+          detail="Runtime health telemetry is not connected"
+          tone="unavailable"
+        />
+      </section>
+
+      <section aria-labelledby="resource-map-heading" className={`${cardClass} overflow-hidden`}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Resource map</p>
+            <h3 id="resource-map-heading" className="mt-1 text-lg font-semibold">Workspace structure</h3>
+          </div>
+          <p className="text-xs leading-5 text-muted">Saved relationships only · not live infrastructure telemetry</p>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-stretch">
+          <ResourceNode
+            step="01"
+            label="Authorized accounts"
+            count={summary.accountCount}
+            empty="No authorized accounts found"
+            description="Your account scope"
+          />
+          <ResourceConnector />
+          <ResourceNode
+            step="02"
+            label="Applications"
+            count={summary.applicationCount}
+            empty="No application records"
+            description="Organized within your accounts"
+          />
+          <ResourceConnector />
+          <ResourceNode
+            step="03"
+            label="Deployment records"
+            count={summary.deploymentCount}
+            empty="No deployment records"
+            description="Stored lifecycle records"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2 rounded-lg border border-warning-border/70 bg-warning-surface/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-warning-text">Build and runtime pipeline not connected</p>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Deployment execution and live service health are unavailable; no infrastructure is represented as running.
+            </p>
+          </div>
+          <Link href="/dashboard/apps" className="shrink-0 text-sm font-medium text-brand transition-colors hover:text-brand-hover">
+            Manage application records
+          </Link>
+        </div>
       </section>
 
       {noApplications ? (
-        <section className={`${cardClass} mt-6 border-dashed`}>
-          <h3 className="text-lg font-semibold">No applications yet</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            Create an application record to get started. An active hosting plan is required, and the isolated build and runtime pipeline is not connected yet.
-          </p>
+        <section className={`${cardClass} border-dashed`}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Getting started</p>
+              <h3 className="mt-1 text-lg font-semibold">
+                {noAccounts ? "Create your first hosting account" : "No applications yet"}
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+                {noAccounts
+                  ? "Accounts organize applications and provide a place to manage team access."
+                  : "Create an application record to get started. An active hosting plan is required; build and runtime execution is not connected."}
+              </p>
+            </div>
           <Link
             href="/dashboard/apps/new"
-            className="mt-5 inline-flex min-h-11 items-center rounded-lg bg-brand-button px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-button-hover"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-brand-button px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-button-hover"
           >
-            Create your first application
+              {noAccounts ? "Set up account" : "Create application"}
           </Link>
+          </div>
         </section>
-      ) : (
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <section aria-labelledby="recent-applications-heading" className={cardClass}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 id="recent-applications-heading" className="font-semibold">Recent applications</h3>
-                <p className="mt-1 text-sm text-muted">Latest application records across your accounts</p>
-              </div>
-              <Link href="/dashboard/apps" className="text-sm font-medium text-brand transition-colors hover:text-brand-hover">
-                All applications
-              </Link>
-            </div>
+      ) : null}
 
-            <ul className="mt-5 divide-y divide-border">
-              {recentApplications.map((application) => (
-                <li key={application.id} className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{application.name}</p>
-                    <p className="mt-1 truncate text-sm text-muted">
-                      {application.accountName} · {application.framework}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="rounded-full border border-border bg-surface-raised px-2.5 py-1 text-xs capitalize text-muted">
-                      {readableStatus(application.status)}
-                    </span>
-                    <p className="mt-2 text-xs text-muted">{formatDate(application.createdAt)}</p>
+      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+        <section id="recent-deployments" aria-labelledby="recent-activity-heading" className={cardClass}>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Workspace feed</p>
+              <h3 id="recent-activity-heading" className="mt-1 text-lg font-semibold">Recent activity</h3>
+              <p className="mt-1 text-sm text-muted">Latest saved application and deployment records</p>
+            </div>
+            <Link href="/dashboard/apps" className="text-sm font-medium text-brand transition-colors hover:text-brand-hover">
+              View applications
+            </Link>
+          </div>
+
+          {activity.length === 0 ? (
+            <div className="mt-5 rounded-lg border border-dashed border-border bg-background px-4 py-6 text-center">
+              <p className="text-sm font-medium">{noAccounts ? "No workspace activity yet" : "No activity records yet"}</p>
+              <p className="mt-1 text-sm leading-6 text-muted">
+                New account, application, and deployment records will appear here when they are saved.
+              </p>
+            </div>
+          ) : (
+            <ol className="mt-4 divide-y divide-border">
+              {activity.map((item) => (
+                <li key={item.id} className="flex min-w-0 gap-3 py-4 first:pt-2 last:pb-1">
+                  <span
+                    aria-hidden="true"
+                    className={`mt-1.5 size-2 shrink-0 rounded-full ${item.kind === "deployment" && item.status === "failed" ? "bg-danger-text" : "bg-brand"}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                      <p className="truncate text-sm font-medium">
+                        {item.title}
+                      </p>
+                      <time className="shrink-0 text-xs text-muted" dateTime={item.createdAt}>
+                        {formatDate(item.createdAt)}
+                      </time>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                      {item.kind === "application" ? (
+                        <span className="truncate">{item.detail}</span>
+                      ) : (
+                        <>
+                          <span>{item.detail}</span>
+                          {item.status && (
+                            <span className={`rounded-full border px-2 py-0.5 capitalize ${deploymentStatusClass(item.status)}`}>
+                              {readableStatus(item.status)}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </li>
               ))}
-            </ul>
-          </section>
+            </ol>
+          )}
+        </section>
 
-          <section id="recent-deployments" aria-labelledby="recent-deployments-heading" className={cardClass}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 id="recent-deployments-heading" className="font-semibold">Recent deployments</h3>
-                <p className="mt-1 text-sm text-muted">Latest recorded deployment status changes</p>
-              </div>
-              <Link href="/dashboard/apps" className="text-sm font-medium text-brand transition-colors hover:text-brand-hover">
-                Applications
-              </Link>
-            </div>
+        <section aria-labelledby="alerts-heading" className={cardClass}>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Signals</p>
+          <h3 id="alerts-heading" className="mt-1 text-lg font-semibold">Needs attention</h3>
+          <p className="mt-1 text-sm text-muted">Based on recorded deployment statuses</p>
 
-            {recentDeployments.length === 0 ? (
-              <div className="mt-5 rounded-lg border border-dashed border-border bg-background p-4">
-                <p className="text-sm font-medium">No deployment records yet</p>
-                <p className="mt-2 text-sm leading-6 text-muted">
-                  Deployment history will appear here when deployment records exist. The build and runtime pipeline is not connected yet.
-                </p>
-              </div>
-            ) : (
-              <ul className="mt-5 space-y-3">
-                {recentDeployments.map((deployment) => (
-                  <li key={deployment.id} className="rounded-lg border border-border bg-background p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{deployment.applicationName}</p>
-                        <p className="mt-1 text-xs text-muted">Created {formatDate(deployment.createdAt)}</p>
-                      </div>
-                      <span className={`rounded-full border px-2.5 py-1 text-xs capitalize ${deploymentStatusClass(deployment.status)}`}>
-                        {readableStatus(deployment.status)}
-                      </span>
-                    </div>
-                    {(deployment.startedAt || deployment.finishedAt || deployment.failureCode) && (
-                      <p className="mt-3 text-xs leading-5 text-muted">
-                        {deployment.startedAt && <>Started {formatDate(deployment.startedAt)}</>}
-                        {deployment.startedAt && deployment.finishedAt && " · "}
-                        {deployment.finishedAt && <>Finished {formatDate(deployment.finishedAt)}</>}
-                        {deployment.failureCode && <> · {readableStatus(deployment.failureCode)}</>}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-      )}
+          <div className={`mt-5 rounded-lg border p-4 ${summary.failedDeployments > 0 ? "border-danger-border bg-danger-surface" : "border-border bg-background"}`}>
+            <p className={`text-2xl font-semibold tabular-nums ${summary.failedDeployments > 0 ? "text-danger-text" : "text-foreground"}`}>
+              {summary.failedDeployments}
+            </p>
+            <p className="mt-1 text-sm font-medium">
+              {summary.failedDeployments === 1 ? "Failed deployment record" : "Failed deployment records"}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-muted">
+              {summary.failedDeployments > 0
+                ? "Review the recorded failures in your application deployment history."
+                : "No failed deployment records were returned for your authorized accounts."}
+            </p>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-border bg-background p-4">
+            <p className="text-sm font-medium text-muted">Live alerts</p>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Alerting and runtime health monitoring are not connected. This view does not confirm service health.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/apps"
+            className="mt-4 inline-flex min-h-10 items-center text-sm font-medium text-brand transition-colors hover:text-brand-hover"
+          >
+            Open applications <span aria-hidden="true" className="ml-1">→</span>
+          </Link>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ResourceNode({
+  step,
+  label,
+  count,
+  empty,
+  description,
+}: {
+  step: string;
+  label: string;
+  count: number;
+  empty: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-background p-4">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted">{step}</p>
+        <span aria-hidden="true" className="mt-1 size-2 rounded-full bg-brand/80" />
+      </div>
+      <p className="mt-3 text-2xl font-semibold tabular-nums">{count}</p>
+      <h4 className="mt-1 text-sm font-medium">{label}</h4>
+      <p className="mt-1 text-xs leading-5 text-muted">{count === 0 ? empty : description}</p>
+    </div>
+  );
+}
+
+function ResourceConnector() {
+  return (
+    <div aria-hidden="true" className="hidden items-center justify-center text-brand/70 md:flex">
+      <span className="text-lg">→</span>
     </div>
   );
 }

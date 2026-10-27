@@ -20,6 +20,10 @@ type DashboardOverviewError = {
   status: number;
   code: string;
   message: string;
+  diagnostic?: {
+    operation: string;
+    errorCode: string;
+  };
 };
 
 type DashboardOverviewSuccess = {
@@ -61,12 +65,24 @@ type DashboardOverviewSuccess = {
 
 type DashboardOverviewResult = DashboardOverviewError | DashboardOverviewSuccess;
 
-function databaseError(): DashboardOverviewError {
+function sanitizedErrorCode(code: unknown): string {
+  if (typeof code !== "string") return "unknown";
+  const normalized = code.toUpperCase();
+  return /^[A-Z0-9]{5}$/.test(normalized) || /^PGRST\d{3}$/.test(normalized)
+    ? normalized
+    : "unknown";
+}
+
+function databaseError(operation: string, errorCode?: unknown): DashboardOverviewError {
   return {
     ok: false,
     status: 500,
     code: "dashboard_overview_load_failed",
     message: "Unable to load dashboard overview.",
+    diagnostic: {
+      operation,
+      errorCode: sanitizedErrorCode(errorCode),
+    },
   };
 }
 
@@ -79,7 +95,7 @@ export async function getDashboardOverview(
     .order("created_at", { ascending: true })
     .limit(MAX_ACCOUNTS + 1);
 
-  if (accountError) return databaseError();
+  if (accountError) return databaseError("accounts.read", accountError.code);
   if ((accountCount ?? accounts?.length ?? 0) > MAX_ACCOUNTS) {
     return {
       ok: false,
@@ -120,7 +136,11 @@ export async function getDashboardOverview(
         .select("id", { count: "exact", head: true })
         .in("account_id", accountIds)
         .eq("status", status);
-      return error ? null : count;
+      return {
+        count: error ? null : count,
+        errorCode: error?.code,
+        status,
+      };
     }),
   );
   const deploymentCountsQuery = Promise.all(
@@ -130,7 +150,11 @@ export async function getDashboardOverview(
         .select("id", { count: "exact", head: true })
         .in("account_id", accountIds)
         .eq("status", status);
-      return error ? null : count;
+      return {
+        count: error ? null : count,
+        errorCode: error?.code,
+        status,
+      };
     }),
   );
   const recentApplicationsQuery = client
@@ -158,13 +182,30 @@ export async function getDashboardOverview(
     recentDeploymentsQuery,
   ]);
 
-  if (
-    !applicationCounts.every((count): count is number => count !== null) ||
-    !deploymentCounts.every((count): count is number => count !== null) ||
-    applicationsError ||
-    deploymentsError
-  ) {
-    return databaseError();
+  const failedApplicationCount = applicationCounts.find((result) => result.count === null);
+  if (failedApplicationCount) {
+    return databaseError(
+      `applications.count.${failedApplicationCount.status}`,
+      failedApplicationCount.errorCode,
+    );
+  }
+  const failedDeploymentCount = deploymentCounts.find((result) => result.count === null);
+  if (failedDeploymentCount) {
+    return databaseError(
+      `deployments.count.${failedDeploymentCount.status}`,
+      failedDeploymentCount.errorCode,
+    );
+  }
+  if (applicationsError) return databaseError("applications.recent", applicationsError.code);
+  if (deploymentsError) return databaseError("deployments.recent", deploymentsError.code);
+
+  const applicationCountValues = applicationCounts.map((result) => result.count);
+  const deploymentCountValues = deploymentCounts.map((result) => result.count);
+  if (!applicationCountValues.every((count): count is number => count !== null)) {
+    return databaseError("applications.count.unknown");
+  }
+  if (!deploymentCountValues.every((count): count is number => count !== null)) {
+    return databaseError("deployments.count.unknown");
   }
 
   const applicationRows = recentApplications ?? [];
@@ -179,11 +220,15 @@ export async function getDashboardOverview(
       .in("account_id", accountIds)
       .in("id", applicationIds);
 
-    if (relatedApplicationsError) return databaseError();
+    if (relatedApplicationsError) {
+      return databaseError("applications.related_names", relatedApplicationsError.code);
+    }
     for (const application of relatedApplications ?? []) {
       applicationNames.set(application.id, application.name);
     }
-    if (applicationIds.some((id) => !applicationNames.has(id))) return databaseError();
+    if (applicationIds.some((id) => !applicationNames.has(id))) {
+      return databaseError("projection.deployment_application_name");
+    }
   }
 
   const accountNames = new Map(authorizedAccounts.map((account) => [account.id, account.name]));
@@ -217,10 +262,14 @@ export async function getDashboardOverview(
 
   if (projectedApplications.some((application) => application === null)
     || projectedDeployments.some((deployment) => deployment === null)) {
-    return databaseError();
+    return databaseError(
+      projectedApplications.some((application) => application === null)
+        ? "projection.application_account_name"
+        : "projection.deployment_application_name",
+    );
   }
-  const applicationCount = applicationCounts.reduce((sum, count) => sum + count, 0);
-  const deploymentCount = deploymentCounts.reduce((sum, count) => sum + count, 0);
+  const applicationCount = applicationCountValues.reduce((sum, count) => sum + count, 0);
+  const deploymentCount = deploymentCountValues.reduce((sum, count) => sum + count, 0);
 
   return {
     ok: true,
@@ -228,14 +277,14 @@ export async function getDashboardOverview(
       summary: {
         accountCount: authorizedAccounts.length,
         applicationCount,
-        activeApplications: applicationCounts[0],
-        suspendedApplications: applicationCounts[1],
-        archivedApplications: applicationCounts[2],
+        activeApplications: applicationCountValues[0],
+        suspendedApplications: applicationCountValues[1],
+        archivedApplications: applicationCountValues[2],
         deploymentCount,
-        activeDeployments: deploymentCounts.slice(0, 4).reduce((sum, count) => sum + count, 0),
-        readyDeployments: deploymentCounts[4],
-        failedDeployments: deploymentCounts[5],
-        cancelledDeployments: deploymentCounts[6],
+        activeDeployments: deploymentCountValues.slice(0, 4).reduce((sum, count) => sum + count, 0),
+        readyDeployments: deploymentCountValues[4],
+        failedDeployments: deploymentCountValues[5],
+        cancelledDeployments: deploymentCountValues[6],
       },
       recentApplications: projectedApplications.filter(
         (application): application is NonNullable<typeof application> => application !== null,

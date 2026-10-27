@@ -7,7 +7,7 @@ const authorizedAccountId = "account-authorized";
 const secondAuthorizedAccountId = "account-also-authorized";
 const otherAccountId = "account-not-authorized";
 
-function createOverviewClient({ accounts, applications, deployments, relatedApplications }) {
+function createOverviewClient({ accounts, applications, deployments, relatedApplications, failure }) {
   const calls = [];
   const authorizedAccountIds = accounts.map((account) => account.id);
 
@@ -44,11 +44,23 @@ function createOverviewClient({ accounts, applications, deployments, relatedAppl
           filters: this.filters,
         });
 
+        const status = this.filters.find(([kind, column]) => kind === "eq" && column === "status")?.[2];
+        const shouldFail = failure
+          && failure.table === table
+          && failure.columns === this.columns
+          && Boolean(failure.head) === Boolean(this.options?.head)
+          && (failure.status === undefined || failure.status === status);
+
         let result;
-        if (table === "customer_accounts") {
+        if (shouldFail) {
+          result = {
+            data: null,
+            count: null,
+            error: { code: failure.code, message: failure.message },
+          };
+        } else if (table === "customer_accounts") {
           result = { data: accounts, count: accounts.length, error: null };
         } else if (table === "applications" && this.options?.head) {
-          const status = this.filters.find(([kind, column]) => kind === "eq" && column === "status")?.[2];
           const count = applications.filter((application) =>
             authorizedAccountIds.includes(application.account_id) && application.status === status,
           ).length;
@@ -68,7 +80,6 @@ function createOverviewClient({ accounts, applications, deployments, relatedAppl
             error: null,
           };
         } else if (table === "deployments" && this.options?.head) {
-          const status = this.filters.find(([kind, column]) => kind === "eq" && column === "status")?.[2];
           const count = deployments.filter((deployment) =>
             authorizedAccountIds.includes(deployment.account_id) && deployment.status === status,
           ).length;
@@ -258,4 +269,60 @@ test("fails explicitly rather than returning misleading summaries for oversized 
     message: "The dashboard overview cannot load more than 100 authorized accounts at once.",
   });
   assert.deepEqual(calls.map((call) => call.table), ["customer_accounts"]);
+});
+
+test("reports a sanitized operation diagnostic when an overview query fails", async () => {
+  const { client } = createOverviewClient({
+    accounts: [{ id: authorizedAccountId, name: "Authorized account" }],
+    applications: [],
+    deployments: [],
+    relatedApplications: [],
+    failure: {
+      table: "applications",
+      columns: "id",
+      head: true,
+      status: "active",
+      code: "42P01",
+      message: "relation failure containing private account details",
+    },
+  });
+
+  const result = await getDashboardOverview(client);
+  assert.deepEqual(result, {
+    ok: false,
+    status: 500,
+    code: "dashboard_overview_load_failed",
+    message: "Unable to load dashboard overview.",
+    diagnostic: {
+      operation: "applications.count.active",
+      errorCode: "42P01",
+    },
+  });
+  assert.equal(JSON.stringify(result).includes("private account details"), false);
+});
+
+test("does not preserve an unrecognized database error code in diagnostics", async () => {
+  const { client } = createOverviewClient({
+    accounts: [{ id: authorizedAccountId, name: "Authorized account" }],
+    applications: [],
+    deployments: [],
+    relatedApplications: [],
+    failure: {
+      table: "customer_accounts",
+      columns: "id, name",
+      code: "secret-project-ref",
+      message: "private details",
+    },
+  });
+
+  const result = await getDashboardOverview(client);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.deepEqual(result.diagnostic, {
+      operation: "accounts.read",
+      errorCode: "unknown",
+    });
+    assert.equal(JSON.stringify(result).includes("secret-project-ref"), false);
+    assert.equal(JSON.stringify(result).includes("private details"), false);
+  }
 });

@@ -4,14 +4,14 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-white text-gray-900 flex flex-col">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
       {/* NAVBAR */}
-      <header className="flex items-center justify-between px-6 py-4 border-b">
-        <h1 className="text-xl font-bold">Wanky Cloud ☁️</h1>
+      <header className="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
+        <h1 className="text-xl font-bold tracking-tight">Wanky Cloud ☁️</h1>
 
         <Link
           href="/dashboard"
-          className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-lg transition"
+          className="rounded-lg bg-brand-button px-4 py-2 text-white transition-colors hover:bg-brand-button-hover"
         >
           Go to Dashboard
         </Link>
@@ -19,11 +19,11 @@ export default function Home() {
 
       {/* HERO */}
       <main className="flex flex-1 flex-col items-center justify-center text-center px-6">
-        <h2 className="text-4xl md:text-5xl font-bold max-w-2xl leading-tight">
-          Deploy servers in seconds — not minutes
+        <h2 className="max-w-2xl text-4xl font-bold leading-tight md:text-5xl">
+          Deploy servers in <span className="text-brand">seconds — not minutes</span>
         </h2>
 
-        <p className="mt-4 text-gray-500 max-w-xl">
+        <p className="mt-4 max-w-xl text-muted">
           Wanky Cloud is a modern infrastructure platform that lets you create,
           manage, and scale servers instantly — without complexity.
         </p>
@@ -31,19 +31,19 @@ export default function Home() {
         <div className="mt-8 flex gap-4">
           <Link
             href="/dashboard"
-            className="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-lg text-lg transition"
+            className="rounded-lg bg-brand-button px-6 py-3 text-lg text-white transition-colors hover:bg-brand-button-hover"
           >
             🚀 Get Started
           </Link>
 
-          <button className="border px-6 py-3 rounded-lg text-lg hover:bg-gray-100 transition">
+          <button className="rounded-lg border border-border bg-surface px-6 py-3 text-lg transition-colors hover:border-brand hover:bg-surface-raised">
             Learn More
           </button>
         </div>
       </main>
 
       {/* FOOTER */}
-      <footer className="text-center text-sm text-gray-400 py-6">
+      <footer className="py-6 text-center text-sm text-muted">
         © {new Date().getFullYear()} Wanky Cloud
       </footer>
     </div>

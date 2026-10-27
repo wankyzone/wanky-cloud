@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { authenticatedFetch } from "@/lib/api-client";
 
 type Server = {
   id: string;
@@ -15,7 +16,7 @@ export default function ServersPage() {
 
   const fetchServers = async () => {
     try {
-      const res = await fetch("/api/servers/list");
+      const res = await authenticatedFetch("/api/servers/list");
       const data = await res.json();
       setServers(data.servers || []);
     } catch (err) {
@@ -38,17 +39,17 @@ export default function ServersPage() {
       <h1 className="text-xl font-bold mb-4">Your Servers</h1>
 
       {servers.length === 0 ? (
-        <p className="text-gray-500">No servers yet.</p>
+        <p className="text-muted">No servers yet.</p>
       ) : (
         <div className="space-y-3">
           {servers.map((server) => (
             <div
               key={server.id}
-              className="p-4 border rounded-lg bg-white shadow-sm"
+              className="rounded-lg border border-border bg-surface p-4 shadow-sm"
             >
               <p className="font-mono text-sm">{server.id}</p>
-              <p className="text-sm text-gray-500">{server.ip}</p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-sm text-muted">{server.ip}</p>
+              <p className="mt-1 text-xs text-muted">
                 Plan: {server.plan}
               </p>
 

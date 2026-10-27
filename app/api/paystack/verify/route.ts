@@ -1,36 +1,32 @@
-// /api/paystack/verify/route.ts
-
-import { supabase } from "@/lib/supabase";
+import { parsePaystackReference } from "@/lib/paystack-security";
+import { apiError, authenticateRequest } from "@/lib/supabase-server";
 
 export async function POST(req: Request) {
-  const { reference, plan } = await req.json();
+  const auth = await authenticateRequest(req);
 
-  // ⚠️ normally verify with Paystack API
-
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData.user?.id;
-
-  if (!userId) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!auth.ok) {
+    return auth.response;
   }
 
-  // expire old subscription
-  await supabase
-    .from("subscriptions")
-    .update({ status: "expired" })
-    .eq("user_id", userId);
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError(400, "invalid_request", "A valid JSON body is required.");
+  }
 
-  // create new subscription
-  await supabase.from("subscriptions").insert([
-    {
-      user_id: userId,
-      plan,
-      status: "active",
-      current_period_end: new Date(
-        Date.now() + 30 * 24 * 60 * 60 * 1000
-      ),
-    },
-  ]);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return apiError(400, "invalid_request", "A transaction reference is required.");
+  }
 
-  return Response.json({ success: true });
+  const reference = parsePaystackReference((body as { reference?: unknown }).reference);
+  if (!reference) {
+    return apiError(400, "invalid_reference", "A valid transaction reference is required.");
+  }
+
+  return apiError(
+    503,
+    "payment_storage_unavailable",
+    "Payment verification is unavailable until pending-payment storage is configured.",
+  );
 }

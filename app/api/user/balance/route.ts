@@ -1,19 +1,27 @@
-import { supabase } from "@/lib/supabase";
+import { getOwnedBalance } from "@/lib/owned-data";
+import { apiError, authenticateRequest } from "@/lib/supabase-server";
 
-export async function GET() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function GET(request: Request) {
+  const auth = await authenticateRequest(request);
 
-  if (!user) {
-    return Response.json({ balance: 0 });
+  if (!auth.ok) {
+    return auth.response;
   }
 
-  const { data } = await supabase
-    .from("profiles")
-    .select("balance")
-    .eq("id", user.id)
-    .single();
+  try {
+    const { data, error } = await getOwnedBalance(auth.client, auth.user.id);
 
-  return Response.json({ balance: data?.balance || 0 });
+    if (error) {
+      return apiError(500, "balance_load_failed", "Unable to load balance.");
+    }
+
+    const balance = data?.balance ?? 0;
+    if (typeof balance !== "number" || !Number.isFinite(balance)) {
+      return apiError(500, "balance_load_failed", "Unable to load balance.");
+    }
+
+    return Response.json({ balance });
+  } catch {
+    return apiError(500, "balance_load_failed", "Unable to load balance.");
+  }
 }

@@ -1,34 +1,59 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --surface: #111114;
+  --surface-raised: #18181b;
+  --border: #2a2a30;
+  --muted: #a1a1aa;
+  --brand: #ff2d8d;
+  --brand-hover: #ff5fa6;
+  --brand-button: #c2185b;
+  --brand-button-hover: #a3154f;
+  --brand-soft: #321023;
+  --warning-border: #713f12;
+  --warning-surface: #21180b;
+  --warning-text: #fcd34d;
+  --danger-border: #7f1d1d;
+  --danger-surface: #241012;
+  --danger-text: #fca5a5;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-button: var(--brand-button);
+  --color-brand-button-hover: var(--brand-button-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-warning-border: var(--warning-border);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-text: var(--warning-text);
+  --color-danger-border: var(--danger-border);
+  --color-danger-surface: var(--danger-surface);
+  --color-danger-text: var(--danger-text);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-:root {
-  --background: #ffffff;
-  --foreground: #111827;
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
 
-  --primary: #ff6b9d;
-  --primary-light: #ffe4ec;
+::selection {
+  background: var(--brand);
+  color: #09090b;
 }

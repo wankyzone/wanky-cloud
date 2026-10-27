@@ -1,19 +1,22 @@
-import { supabase } from "@/lib/supabase";
+import { listOwnedServers } from "@/lib/owned-data";
+import { apiError, authenticateRequest } from "@/lib/supabase-server";
 
-export async function GET() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function GET(request: Request) {
+  const auth = await authenticateRequest(request);
 
-  if (!user) {
-    return Response.json({ servers: [] });
+  if (!auth.ok) {
+    return auth.response;
   }
 
-  const { data } = await supabase
-    .from("servers")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+  try {
+    const { data, error } = await listOwnedServers(auth.client, auth.user.id);
 
-  return Response.json({ servers: data || [] });
+    if (error) {
+      return apiError(500, "server_list_failed", "Unable to load servers.");
+    }
+
+    return Response.json({ servers: data ?? [] });
+  } catch {
+    return apiError(500, "server_list_failed", "Unable to load servers.");
+  }
 }

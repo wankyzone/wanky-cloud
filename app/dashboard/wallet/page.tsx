@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { authenticatedFetch } from "@/lib/api-client";
 
 export default function WalletPage() {
   const [balance, setBalance] = useState(0);
@@ -8,7 +9,7 @@ export default function WalletPage() {
 
   const fetchBalance = async () => {
     try {
-      const res = await fetch("/api/user/balance");
+      const res = await authenticatedFetch("/api/user/balance");
       const data = await res.json();
       setBalance(data.balance || 0);
     } catch (err) {
@@ -18,33 +19,26 @@ export default function WalletPage() {
     }
   };
 
-  const payWithPaystack = () => {
-    const handler = (window as any).PaystackPop.setup({
-      key: process.env.NEXT_PUBLIC_PAYSTACK_KEY,
-      email: "user@email.com", // replace with real user later
-      amount: 5000 * 100,
-      ref: "" + Math.floor(Math.random() * 1000000000),
+  const payWithPaystack = async () => {
+    try {
+      const res = await authenticatedFetch("/api/paystack/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "wallet" }),
+      });
+      const data = await res.json();
 
-      callback: async function (response: any) {
-        await fetch("/api/paystack/verify", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            reference: response.reference,
-          }),
-        });
+      if (!res.ok) {
+        alert(data.error || "Unable to initialize payment.");
+        return;
+      }
 
-        fetchBalance();
-      },
-
-      onClose: function () {
-        console.log("Payment closed");
-      },
-    });
-
-    handler.openIframe();
+      if (typeof data.data?.authorization_url === "string") {
+        window.location.assign(data.data.authorization_url);
+      }
+    } catch {
+      alert("Unable to initialize payment.");
+    }
   };
 
   useEffect(() => {
@@ -59,14 +53,14 @@ export default function WalletPage() {
     <div className="p-6 max-w-md">
       <h1 className="text-xl font-bold mb-4">Wallet</h1>
 
-      <div className="bg-white border p-4 rounded-lg mb-4">
-        <p className="text-sm text-gray-500">Balance</p>
+      <div className="mb-4 rounded-lg border border-border bg-surface p-4">
+        <p className="text-sm text-muted">Balance</p>
         <p className="text-xl font-bold">₦{balance}</p>
       </div>
 
       <button
         onClick={payWithPaystack}
-        className="w-full bg-black text-white py-2 rounded-lg"
+        className="w-full rounded-lg bg-brand-button py-2 text-white transition-colors hover:bg-brand-button-hover"
       >
         Fund Wallet
       </button>

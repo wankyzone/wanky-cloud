@@ -1,52 +1,55 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
-import { supabase } from "@/lib/supabase";
+import { verifyPaystackSignature } from "@/lib/paystack-security";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.text(); // raw body required
+    const body = await req.text();
     const signature = req.headers.get("x-paystack-signature");
+    const secret = process.env.PAYSTACK_SECRET_KEY;
 
-    const hash = crypto
-      .createHmac("sha512", process.env.PAYSTACK_SECRET_KEY!)
-      .update(body)
-      .digest("hex");
-
-    // 🔐 Verify Paystack webhook
-    if (hash !== signature) {
-      return new NextResponse("Invalid signature", { status: 401 });
+    if (!secret) {
+      return NextResponse.json(
+        { error: "Webhook verification is not configured.", code: "server_misconfigured" },
+        { status: 503 },
+      );
     }
 
-    const event = JSON.parse(body);
+    if (!verifyPaystackSignature(body, signature, secret)) {
+      return NextResponse.json(
+        { error: "Invalid webhook signature.", code: "invalid_signature" },
+        { status: 401 },
+      );
+    }
 
-    // ✅ Only handle successful payments
-    if (event.event === "charge.success") {
-      const email = event.data.customer.email;
-      const amount = event.data.amount / 100; // convert from kobo
+    let event: unknown;
+    try {
+      event = JSON.parse(body);
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid webhook payload.", code: "invalid_payload" },
+        { status: 400 },
+      );
+    }
 
-      // 👉 find user by email
-      const { data: user } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("email", email)
-        .single();
+    if (!event || typeof event !== "object" || Array.isArray(event)) {
+      return NextResponse.json(
+        { error: "Invalid webhook payload.", code: "invalid_payload" },
+        { status: 400 },
+      );
+    }
 
-      if (!user) {
-        return new NextResponse("User not found", { status: 404 });
-      }
-
-      // 💰 Update wallet
-      await supabase
-        .from("profiles")
-        .update({
-          balance: (user.balance || 0) + amount,
-        })
-        .eq("id", user.id);
+    if ((event as { event?: unknown }).event === "charge.success") {
+      return NextResponse.json(
+        { error: "Payment fulfillment is unavailable until idempotent payment storage is configured.", code: "fulfillment_unavailable" },
+        { status: 503 },
+      );
     }
 
     return NextResponse.json({ received: true });
-  } catch (err) {
-    console.error("WEBHOOK ERROR:", err);
-    return new NextResponse("Webhook failed", { status: 500 });
+  } catch {
+    return NextResponse.json(
+      { error: "Webhook processing failed.", code: "webhook_failed" },
+      { status: 500 },
+    );
   }
 }

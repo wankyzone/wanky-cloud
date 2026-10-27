@@ -1,37 +1,27 @@
-import { NextResponse } from "next/server";
+import { parsePaystackPurchase } from "@/lib/paystack-security";
+import { apiError, authenticateRequest } from "@/lib/supabase-server";
 
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const { email, amount } = body;
+  const auth = await authenticateRequest(req);
 
-    if (!email || !amount) {
-      return NextResponse.json(
-        { error: "Missing email or amount" },
-        { status: 400 }
-      );
-    }
-
-    const res = await fetch("https://api.paystack.co/transaction/initialize", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        amount: amount * 100, // convert to kobo
-      }),
-    });
-
-    const data = await res.json();
-
-    return NextResponse.json(data);
-  } catch (err) {
-    console.error("PAYSTACK INIT ERROR:", err);
-    return NextResponse.json(
-      { error: "Failed to initialize payment" },
-      { status: 500 }
-    );
+  if (!auth.ok) {
+    return auth.response;
   }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return apiError(400, "invalid_request", "A valid JSON body is required.");
+  }
+
+  if (!parsePaystackPurchase(body)) {
+    return apiError(400, "invalid_purchase", "A valid payment type and plan are required.");
+  }
+
+  return apiError(
+    503,
+    "payment_storage_unavailable",
+    "Payments are temporarily unavailable until pending-payment storage is configured.",
+  );
 }

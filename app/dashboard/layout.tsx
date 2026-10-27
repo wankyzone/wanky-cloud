@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+
+const navigation = [
+  { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/apps", label: "Applications" },
+  { href: "/dashboard/wallet", label: "Billing" },
+  { href: "/dashboard/servers", label: "Legacy servers" },
+];
 
 export default function DashboardLayout({
   children,
@@ -11,85 +18,90 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
-  // 🔐 AUTH GUARD
   useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
-
-      if (!data.user) {
-        router.push("/auth");
-      } else {
+    let active = true;
+    void supabase.auth.getUser().then(({ data, error }) => {
+      if (!active) return;
+      if (error || !data.user) {
+        router.replace("/auth");
+        return;
+      }
+      setLoading(false);
+    }).catch(() => {
+      if (active) {
+        setAuthError("Unable to verify your session. Please retry.");
         setLoading(false);
       }
+    });
+    return () => {
+      active = false;
     };
-
-    checkUser();
   }, [router]);
 
+  async function signOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setAuthError("Unable to sign out. Please try again.");
+      return;
+    }
+    router.replace("/auth");
+  }
+
   if (loading) {
-    return <p className="p-6">Loading...</p>;
+    return <p role="status" className="p-6 text-sm text-muted">Checking your session…</p>;
+  }
+
+  if (authError) {
+    return (
+      <main className="p-6">
+        <p role="alert" className="text-sm text-danger-text">{authError}</p>
+        <button className="mt-3 rounded-lg border border-border px-4 py-2 text-sm hover:border-brand" onClick={() => window.location.reload()}>
+          Retry
+        </button>
+      </main>
+    );
   }
 
   return (
-    <div className="min-h-screen flex bg-white">
-      {/* SIDEBAR */}
-      <aside className="w-64 border-r p-6 hidden md:flex flex-col">
-        <h2 className="text-xl font-bold mb-8">
-          Wanky Cloud ☁️
-        </h2>
-
-        <nav className="flex flex-col gap-4 text-sm">
-          <Link
-            href="/dashboard"
-            className="hover:text-pink-500 transition"
-          >
-            Dashboard
-          </Link>
-
-          <Link
-            href="/dashboard/servers"
-            className="hover:text-pink-500 transition"
-          >
-            Servers
-          </Link>
-
-          <Link
-            href="/"
-            className="hover:text-pink-500 transition mt-8 text-gray-400"
-          >
-            ← Back to Home
-          </Link>
+    <div className="min-h-screen bg-background md:flex">
+      <aside className="border-b border-border bg-surface p-4 md:min-h-screen md:w-64 md:border-b-0 md:border-r md:p-6">
+        <Link href="/dashboard" className="text-xl font-bold tracking-tight hover:text-brand">Wanky Cloud</Link>
+        <nav aria-label="Dashboard" className="mt-5 flex gap-2 overflow-x-auto md:flex-col md:gap-1">
+          {navigation.map((item) => {
+            const selected = pathname === item.href || (
+              item.href === "/dashboard/apps" && pathname.startsWith("/dashboard/apps/")
+            );
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={selected ? "page" : undefined}
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm transition ${
+                  selected ? "bg-brand-soft font-medium text-brand" : "text-muted hover:bg-surface-raised hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
+        <p className="mt-6 hidden text-xs leading-5 text-muted md:block">
+          Application hosting is not available until the build and runtime pipeline is connected.
+        </p>
       </aside>
 
-      {/* MAIN */}
-      <main className="flex-1 flex flex-col">
-        {/* TOPBAR */}
-        <header className="h-16 border-b flex items-center justify-between px-6">
-          <h1 className="font-semibold text-lg">
-            Dashboard
-          </h1>
-
-          <div className="flex items-center gap-4 text-sm text-gray-500">
-            <span>Welcome, Builder 🚀</span>
-
-            {/* 🔓 LOGOUT */}
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                router.push("/auth");
-              }}
-              className="text-red-500 hover:underline"
-            >
-              Logout
-            </button>
-          </div>
+      <main className="min-w-0 flex-1">
+        <header className="flex min-h-16 items-center justify-between gap-4 border-b border-border bg-surface px-4 md:px-8">
+          <h1 className="font-semibold">Customer dashboard</h1>
+          <button onClick={() => void signOut()} className="text-sm text-muted transition-colors hover:text-brand">
+            Sign out
+          </button>
         </header>
-
-        {/* CONTENT */}
-        <div className="p-6">{children}</div>
+        <div className="p-4 md:p-8">{children}</div>
       </main>
     </div>
   );
